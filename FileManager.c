@@ -1,4 +1,5 @@
 #include <stdio.h>
+#define MAX_SIZE 65536*1024
 struct rootdir_entry{
 	char name[20];
 	unsigned short int size;
@@ -24,11 +25,17 @@ int isDeleted(struct rootdir_entry * entry){
 				&& !( * entry ).size == 0
 				&& !( * entry ).name[0] == 0 ;
 };
-void menu(){
-	printf("~	");
-  	scanf("%s", consoleCommand);
-	printf("~	%s",consoleCommand);
-};
+void init(){
+	//OPEN FILE "simul.fs"
+	//IF EXISTS FILE DELETE IT
+	//free_blocks = 0;
+	//
+}
+void create(char name[] ){}
+void read(char name[]){}
+void delete(char name[]){}
+void deleteFile(FILE * file){}
+void list(){}
 void main(int argc, const char* argv[]){
-	menu();
+	
 }
