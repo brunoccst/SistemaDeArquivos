@@ -1,5 +1,11 @@
-CC=gcc
-CFLAGS=-I.
+CC = gcc
+FILES = FileManager.c
+OUT_EXE = simulfs
 
-simul.fs: FileManager.c
-	$(CC) -w -o simulfs FileManager.c -I .
+build: $(FILES)
+	$(CC) -w -o $(OUT_EXE) $(FILES)
+
+clean:
+	rm -f simulfs
+
+rebuild: clean build
