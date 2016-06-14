@@ -30,6 +30,9 @@ unsigned short int sector_index[512];
 char consoleCommand[10];
 char fileName[20];
 
+
+FILE * simul;
+
 int isEOF(struct rootdir_entry * entry){
 	return ( * entry ).size == 0
 				&& ( * entry ).index == 0
@@ -41,17 +44,41 @@ int isDeleted(struct rootdir_entry * entry){
 				&& !( * entry ).name[0] == 0 ;
 };
 
+int filesize(FILE * fptr){
+	fseek(fptr,0,SEEK_END);
+	int size = ftell(fptr);
+	fseek(fptr,0,SEEK_SET);
+	return size;
+}
+int hasEnoughSpace(int size){
+	int nextFreePosition = ROOT.free_blocks;
+	while(nextFreePosition){
+		seekBlock(nextFreePosition);
+		fread(&nextFreePosition,sizeof(int),1,simul);
+		size -= 1024;
+	}
+	return size < 1;
+}
+void writeNextBlock(){
+	seekBlock(ROOT.free_blocks);
+	fread(&ROOT.free_blocks,sizeof(unsigned short int),1,simul);
+	fread(&ROOT.free_blocks,sizeof(unsigned short int),1,simul);
+	//TODO
 
+}
+void seekBlock(int bloco){
+	fseek(simul,4096 + 1024*(bloco-1),SEEK_SET);
+}
 
 void startRoot(){
 	memset(&ROOT,0,sizeof(struct rootdir));
-	ROOT.free_blocks = 4096; // PRIMEIRO INDEX
+	ROOT.free_blocks = 1; // PRIMEIRO INDEX
 }
-void writeRoot(FILE * file){
-	fwrite(&ROOT,sizeof(struct rootdir),1, file);
+void writeRoot(){
+	fwrite(&ROOT,sizeof(struct rootdir),1, simul);
 }
-void readRoot(FILE * file){
-	fread(&ROOT,sizeof(struct rootdir),1, file);
+void readRoot(){
+	fread(&ROOT,sizeof(struct rootdir),1, simul);
 }
 
 void init()
@@ -60,23 +87,55 @@ void init()
 	startRoot();
 	remove("simulfs");
 	//printf("'teste record ---> ROOT.free_blocks = %u\n'",ROOT.free_blocks);
-	FILE *fptr;
-	if ( !( fptr = fopen( "simul.fs", "wb+" ))){
+	if ( !( simul = fopen( "simul.fs", "wb" ))){
 	    printf( "File could not be opened.\n" );
 	}
 	else
 	{
 	    printf("Initializing 'simul.fs'\n");
-		writeRoot(fptr);
-		fseek(fptr,0,SEEK_SET);
-	    printf("'simul.fs' initialized.\n");
-		ROOT.free_blocks = 0;
-		readRoot(fptr);
+		writeRoot();
+		int cont = 1;
+		memset(sector_data,0,1024);
+		while(cont <= 65536){
+			fwrite(&cont,sizeof(int),1,simul);
+			fwrite(sector_data,1024,1, simul);
+			cont++;
+		}
+	    printf("'simul.fs' initialized.\n");	
+		fclose(simul);
 		//printf("'teste record ---> ROOT.free_blocks = %u'\n",ROOT.free_blocks);
 	}
 }
+int createNewEntry(FILE * fptr){
+	struct rootdir_entry newEntry;
+	memset(&newEntry,0, sizeof(struct rootdir_entry));//CRIA NOVA ENTRADA
+	hasEnoughSpace(filesize(fptr));
+	return 0;
+}
 
 void create(char name[] ){
+	FILE *toCreate;
+	if ( !( simul = fopen( "simul.fs", "wb+" ))){
+	    printf( "File could not be opened.\n" );
+	}
+	else
+	{
+		readRoot(simul);
+		memset(sector_data,0,1024);
+		toCreate = fopen(name,"rb");
+		if(createNewEntry(toCreate))
+		{
+			printf("Nao há espaço livre!!!");
+			return;
+		}
+		while(!feof(toCreate))
+		{
+			fread(sector_data,sizeof(sector_data),1,toCreate);
+			writeNextBlock(simul);
+		}	
+		fclose(simul);	
+		fclose(toCreate);
+	}
 
 
 }
