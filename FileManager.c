@@ -27,7 +27,8 @@ const char * ls_ = "-ls";
 
 unsigned char sector_data[1024];
 unsigned short int sector_index[512];
-char consoleCommand[10];
+unsigned int ignore = 0;
+char consoleCommand[16];
 char fileName[20];
 
 
@@ -76,9 +77,13 @@ void startRoot(){
 	ROOT.free_blocks = 1; // PRIMEIRO INDEX
 }
 void writeRoot(){
+	fseek(simul,0,SEEK_SET);
+	printf("lugar: %d\n",ftell(simul));
 	fwrite(&ROOT,sizeof(struct rootdir),1, simul);
 }
 void readRoot(){
+	fseek(simul,0,SEEK_SET);
+	printf("lugar: %d",ftell(simul));
 	fread(&ROOT,sizeof(struct rootdir),1, simul);
 }
 int createNewEntry(FILE * fptr){
@@ -90,6 +95,7 @@ int createNewEntry(FILE * fptr){
 			cont++;
 			newEntry++;
 		}
+		printf("%d\n",cont);
 		if(cont == 170)
 			return 0;
 		memset(newEntry,0,sizeof(struct rootdir_entry));
@@ -113,6 +119,14 @@ void copyFile(FILE * fptr){
 		writeNextBlock();
 	}
 }
+void writeIndexes(){
+	struct rootdir_entry entry;
+	findFile(&entry);
+	seekSector(entry.index,sizeof(short int));
+	fwrite(sector_index,sizeof(sector_index),1,simul);
+	memset(sector_index,0,sizeof(sector_index));
+	fwrite(sector_index,sizeof(sector_index),1,simul);
+}
 void findFile(struct rootdir_entry * entry){
 	int i = 0;	
 	for(;i<170;i++){
@@ -122,32 +136,49 @@ void findFile(struct rootdir_entry * entry){
 		}
 	}
 }
+void loadIndexSector(unsigned short int index){
+	seekSector(index,sizeof(short int));
+	fread(sector_index,sizeof(sector_index),1,simul);
+}
+void deleteSector(unsigned short int index){
+	seekSector(index,0);
+	fwrite(&ROOT.free_blocks,sizeof(unsigned short int),1, simul);
+	ROOT.free_blocks = index;
+}
 
 void init()
 {
-	//printf("'teste record ---> ROOT.free_blocks = %u\n'",ROOT.free_blocks);
-	startRoot();
-	remove("simulfs");
-	//printf("'teste record ---> ROOT.free_blocks = %u\n'",ROOT.free_blocks);
-	printf("Initializing 'simul.fs'\n");
-	writeRoot();
-	unsigned short int cont = 1;
-	unsigned short int aux = 0;
-	memset(sector_data,0,1024);
-	while(cont <= 65536){
-		fwrite(&cont,sizeof(unsigned short int),1,simul);
-		fwrite(sector_data,1024,1, simul);
-		cont++;
-	}
-    printf("'simul.fs' initialized.\n");	
 	fclose(simul);
-	//printf("'teste record ---> ROOT.free_blocks = %u'\n",ROOT.free_blocks);
+	if ( !( simul = fopen( "simul.fs", "wb+" )))
+	{
+	    printf( "File could not be opened.\n" );
+	}
+	else
+	{
+		//printf("'teste record ---> ROOT.free_blocks = %u'\n",ROOT.free_blocks);
+		//printf("'teste record ---> ROOT.free_blocks = %u'\n",ROOT.free_blocks);
+		printf("Initializing 'simul.fs'\n");
+		writeRoot();
+		unsigned short int cont = 0;
+		unsigned short int aux = 0;
+		memset(sector_data,0,1024);
+		while(++cont){
+			fwrite(&cont,sizeof(unsigned short int),1,simul);
+			fwrite(sector_data,sizeof(sector_data),1, simul);
+			//printf("%d\n%s\n",cont,sector_data);
+		}
+		ROOT.free_blocks = 0;
+		//printf("'teste record ---> ROOT.free_blocks = %u'\n",ROOT.free_blocks);
+		printf("'simul.fs' initialized.\n");	
+		//printf("'teste record ---> ROOT.free_blocks = %u'\n",ROOT.free_blocks);
+		fclose(simul);
+	}
 }
 void create(){
 	FILE *toCreate;
 	memset(sector_data,0,1024);
 	
-	if ( !( toCreate = fopen( fileName, "wb+" )))
+	if ( !( toCreate = fopen( fileName, "rb" )))
 	{
 	    printf( "File could not be opened.\n" );
 	}
@@ -160,25 +191,18 @@ void create(){
 		}
 		printf("Criando arquivo...\n");
 		copyFile(toCreate);
+		writeIndexes();
 		printf("Arquivo criado!!!\n");
 		fclose(toCreate);
 	}
-}
-void loadIndexSector(unsigned short int index){
-	seekSector(index,sizeof(short int));
-	fread(sector_index,sizeof(sector_index),1,simul);
-}
-void deleteSector(unsigned short int index){
-	seekSector(index,0);
-	fwrite(&ROOT.free_blocks,sizeof(unsigned short int),1, simul);
-	ROOT.free_blocks = index;
+	writeRoot();
 }
 void read(){
 	FILE *toCreate;
 	struct rootdir_entry entry;
-
 	memset(&entry,0,sizeof(struct rootdir_entry));
 	findFile(&entry);
+
 	if(isDeleted(&entry)){
 		printf("Arquivo nao encontrado!!!\n");
 		return;
@@ -189,11 +213,19 @@ void read(){
 	    printf( "File could not be opened.\n" );
 	}
 	else{
-		
-		
+		loadIndexSector(entry.index);
+		unsigned short int * indexes = sector_index;
+		int size = entry.size;
+		while((*indexes) != 0)
+		{
+			seekSector(*indexes,sizeof(short int));
+			fread(sector_data,sizeof(sector_data),1,simul);
+			fwrite(sector_data,size < 1024 ? size : sizeof(sector_data),1,toCreate);
+			size -= sizeof(sector_data);
+		}
 		fclose(toCreate);
 	}
-
+	
 }
 void delete(){
 	struct rootdir_entry entry;
@@ -209,6 +241,7 @@ void delete(){
 	{
 		deleteSector(*indexes);
 	}
+	writeRoot();
 }
 void list(){
 	int cont = 0;
@@ -227,42 +260,44 @@ void main(int argc, const char* argv[]){
 	memset(fileName,0,20);
 	memset(consoleCommand,0,10);
 	sprintf(consoleCommand,"%s",(char*) argv[1]);
-	if ( !( simul = fopen( "simul.fs", "wb+" )))
+	
+	if ( !( simul = fopen( "simul.fs", "rb+" )))
 	{
 	    printf( "File could not be opened.\n" );
 	}
 	else
 	{
-		readRoot(simul);
+		readRoot();
+		printf("%d\n",ROOT.free_blocks);
 		if (strcmp(consoleCommand, init_) == 0)
 		{
 			init();
 		}
-		else if (strcmp(consoleCommand, create_) == 0)
-		{
-			sprintf(fileName,"%s",(char*) argv[2]);
-			create();
+		else{ 
+			if (strcmp(consoleCommand, create_) == 0)
+			{
+				sprintf(fileName,"%s",(char*) argv[2]);
+				create();
+			}
+			else if (strcmp(consoleCommand, read_) == 0)
+			{
+				sprintf(fileName,"%s",(char*) argv[2]);
+				read();
+			}
+			else if (strcmp(consoleCommand, del_) == 0)
+			{
+				sprintf(fileName,"%s",(char*) argv[2]);
+				delete();
+			}
+			else if (strcmp(consoleCommand, ls_) == 0)
+			{
+				list();
+			}
+			else
+			{
+				printf("Command not valid.\n");
+			}
+			fclose(simul);
 		}
-		else if (strcmp(consoleCommand, read_) == 0)
-		{
-			sprintf(fileName,"%s",(char*) argv[2]);
-			read();
-		}
-		else if (strcmp(consoleCommand, del_) == 0)
-		{
-			sprintf(fileName,"%s",(char*) argv[2]);
-			delete();
-		}
-		else if (strcmp(consoleCommand, ls_) == 0)
-		{
-			list();
-		}
-		else
-		{
-			printf("Command not valid.\n");
-		}
-		fseek(simul,0,SEEK_SET);
-		writeRoot();
-		fclose(simul);
 	}
 }
