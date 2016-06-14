@@ -61,7 +61,6 @@ int hasEnoughSpace(int size){
 void writeNextBlock(){
 	seekSector(ROOT.free_blocks,0);
 	loadNextFreeBlock();
-	skipBlockTrailing();
 	fwrite(sector_data,sizeof(sector_data),1,simul);
 	memset(sector_data,0,sizeof(sector_data));
 }
@@ -70,10 +69,6 @@ void seekSector(int bloco,int offset){
 }
 void loadNextFreeBlock(){
 	fread(&ROOT.free_blocks,sizeof(unsigned short int),1,simul);
-}
-void skipBlockTrailing(){
-	unsigned short int aux = 0;
-	fread(&aux,sizeof(unsigned short int),1,simul);
 }
 
 void startRoot(){
@@ -110,6 +105,8 @@ int createNewEntry(FILE * fptr){
 void copyFile(FILE * fptr){
 	unsigned short int * indexes = sector_index;
 	while(!feof(fptr)){
+		if(ftell(fptr) < sizeof(sector_data))
+			memset(sector_data,0,sizeof(sector_data));
 		fread(sector_data,sizeof(sector_data),1,fptr);
 		*indexes = ROOT.free_blocks;
 		indexes++;
@@ -120,7 +117,7 @@ void findFile(struct rootdir_entry * entry){
 	int i = 0;	
 	for(;i<170;i++){
 		if(strcmp(ROOT.list_entry[i].name, fileName) == 0 ){
-			entry = ROOT.list_entry[i];
+			entry = &ROOT.list_entry[i];
 			return;
 		}
 	}
@@ -132,35 +129,30 @@ void init()
 	startRoot();
 	remove("simulfs");
 	//printf("'teste record ---> ROOT.free_blocks = %u\n'",ROOT.free_blocks);
-	if ( !( simul = fopen( "simul.fs", "wb" ))){
-	    printf( "File could not be opened.\n" );
+	printf("Initializing 'simul.fs'\n");
+	writeRoot();
+	unsigned short int cont = 1;
+	unsigned short int aux = 0;
+	memset(sector_data,0,1024);
+	while(cont <= 65536){
+		fwrite(&cont,sizeof(unsigned short int),1,simul);
+		fwrite(sector_data,1024,1, simul);
+		cont++;
 	}
-	else
-	{
-	    printf("Initializing 'simul.fs'\n");
-		writeRoot();
-		unsigned short int cont = 1;
-		memset(sector_data,0,1024);
-		while(cont <= 65536){
-			fwrite(&cont,sizeof(unsigned short int),1,simul);
-			fwrite(sector_data,1024,1, simul);
-			cont++;
-		}
-	    printf("'simul.fs' initialized.\n");	
-		fclose(simul);
-		//printf("'teste record ---> ROOT.free_blocks = %u'\n",ROOT.free_blocks);
-	}
+    printf("'simul.fs' initialized.\n");	
+	fclose(simul);
+	//printf("'teste record ---> ROOT.free_blocks = %u'\n",ROOT.free_blocks);
 }
 void create(){
 	FILE *toCreate;
-	if ( !( simul = fopen( "simul.fs", "wb+" ))){
+	memset(sector_data,0,1024);
+	
+	if ( !( toCreate = fopen( fileName, "wb+" )))
+	{
 	    printf( "File could not be opened.\n" );
 	}
 	else
 	{
-		readRoot(simul);
-		memset(sector_data,0,1024);
-		toCreate = fopen(fileName,"rb");
 		if(!createNewEntry(toCreate))
 		{
 			printf("Nao há espaço livre!!!\n");
@@ -168,34 +160,52 @@ void create(){
 		}
 		printf("Criando arquivo...\n");
 		copyFile(toCreate);
-		writeRoot();
 		printf("Arquivo criado!!!\n");
-		fclose(simul);	
 		fclose(toCreate);
 	}
 }
 void loadIndexSector(unsigned short int index){
-	seekSector(index);
+	seekSector(index,sizeof(short int));
 	fread(sector_index,sizeof(sector_index),1,simul);
 }
 void deleteSector(unsigned short int index){
-	seekSector(index);
+	seekSector(index,0);
 	fwrite(&ROOT.free_blocks,sizeof(unsigned short int),1, simul);
-	seekSector(index,sizeof(int));
 	ROOT.free_blocks = index;
 }
-void read(){}
+void read(){
+	FILE *toCreate;
+	struct rootdir_entry entry;
+
+	memset(&entry,0,sizeof(struct rootdir_entry));
+	findFile(&entry);
+	if(isDeleted(&entry)){
+		printf("Arquivo nao encontrado!!!\n");
+		return;
+	}
+
+	if ( !( toCreate = fopen( fileName, "wb+" )))
+	{
+	    printf( "File could not be opened.\n" );
+	}
+	else{
+		
+		
+		fclose(toCreate);
+	}
+
+}
 void delete(){
 	struct rootdir_entry entry;
 	memset(&entry,0,sizeof(struct rootdir_entry));
 	findFile(&entry);
-	if(isDeleted(entry)){
+	if(isDeleted(&entry)){
 		printf("Arquivo nao encontrado!!!\n");
 		return;
 	}
 	loadIndexSector(entry.index);
-	unsigned short int indexes = sector_index;
-	while(*indexes != 0)
+	unsigned short int * indexes = sector_index;
+	while((*indexes) != 0)
 	{
 		deleteSector(*indexes);
 	}
@@ -217,31 +227,42 @@ void main(int argc, const char* argv[]){
 	memset(fileName,0,20);
 	memset(consoleCommand,0,10);
 	sprintf(consoleCommand,"%s",(char*) argv[1]);
-	if (strcmp(consoleCommand, init_) == 0)
+	if ( !( simul = fopen( "simul.fs", "wb+" )))
 	{
-		init();
-	}
-	else if (strcmp(consoleCommand, create_) == 0)
-	{
-		sprintf(fileName,"%s",(char*) argv[2]);
-		create();
-	}
-	else if (strcmp(consoleCommand, read_) == 0)
-	{
-		sprintf(fileName,"%s",(char*) argv[2]);
-		read();
-	}
-	else if (strcmp(consoleCommand, del_) == 0)
-	{
-		sprintf(fileName,"%s",(char*) argv[2]);
-		delete();
-	}
-	else if (strcmp(consoleCommand, ls_) == 0)
-	{
-		list();
+	    printf( "File could not be opened.\n" );
 	}
 	else
 	{
-		printf("Command not valid.\n");
+		readRoot(simul);
+		if (strcmp(consoleCommand, init_) == 0)
+		{
+			init();
+		}
+		else if (strcmp(consoleCommand, create_) == 0)
+		{
+			sprintf(fileName,"%s",(char*) argv[2]);
+			create();
+		}
+		else if (strcmp(consoleCommand, read_) == 0)
+		{
+			sprintf(fileName,"%s",(char*) argv[2]);
+			read();
+		}
+		else if (strcmp(consoleCommand, del_) == 0)
+		{
+			sprintf(fileName,"%s",(char*) argv[2]);
+			delete();
+		}
+		else if (strcmp(consoleCommand, ls_) == 0)
+		{
+			list();
+		}
+		else
+		{
+			printf("Command not valid.\n");
+		}
+		fseek(simul,0,SEEK_SET);
+		writeRoot();
+		fclose(simul);
 	}
 }
