@@ -50,9 +50,11 @@ int filesize(FILE * fptr){
 	return size;
 }
 int hasEnoughSpace(int size){
-	int nextFreePosition = ROOT.free_blocks;
+	unsigned short int nextFreePosition = ROOT.free_blocks;
+	printf("size: %d\n",size);
 	size += 1024;//PARA GRAVAR A LISTA DE INDEXES
 	while(nextFreePosition){
+		//printf("nextFreePosition: %u\n",nextFreePosition);
 		seekSector(nextFreePosition,0);
 		fread(&nextFreePosition,sizeof(unsigned short int),1,simul);
 		size -= 1024;
@@ -66,7 +68,11 @@ void writeNextBlock(){
 	memset(sector_data,0,sizeof(sector_data));
 }
 void seekSector(int bloco,int offset){
-	fseek(simul,offset + 4096 + 1024*(bloco-1),SEEK_SET);
+	int result = offset + 4096 + 1024*(bloco-1);
+	printf("position: %d\n",result);
+	fseek(simul,result,SEEK_SET);
+	printf("position: %d\n",ftell(simul));
+	
 }
 void loadNextFreeBlock(){
 	fread(&ROOT.free_blocks,sizeof(unsigned short int),1,simul);
@@ -83,7 +89,7 @@ void writeRoot(){
 }
 void readRoot(){
 	fseek(simul,0,SEEK_SET);
-	printf("lugar: %d",ftell(simul));
+	printf("lugar: %d\n",ftell(simul));
 	fread(&ROOT,sizeof(struct rootdir),1, simul);
 }
 int createNewEntry(FILE * fptr){
@@ -157,18 +163,21 @@ void init()
 	{
 		//printf("'teste record ---> ROOT.free_blocks = %u'\n",ROOT.free_blocks);
 		//printf("'teste record ---> ROOT.free_blocks = %u'\n",ROOT.free_blocks);
+		startRoot();
 		printf("Initializing 'simul.fs'\n");
 		writeRoot();
 		unsigned short int cont = 0;
-		unsigned short int aux = 0;
+		printf("%d\n",&cont);
 		memset(sector_data,0,1024);
 		while(++cont){
+			printf("%d\n",cont);
 			fwrite(&cont,sizeof(unsigned short int),1,simul);
 			fwrite(sector_data,sizeof(sector_data),1, simul);
 			//printf("%d\n%s\n",cont,sector_data);
 		}
 		ROOT.free_blocks = 0;
-		//printf("'teste record ---> ROOT.free_blocks = %u'\n",ROOT.free_blocks);
+		readRoot();
+		printf("'teste record ---> ROOT.free_blocks = %u'\n",ROOT.free_blocks);
 		printf("'simul.fs' initialized.\n");	
 		//printf("'teste record ---> ROOT.free_blocks = %u'\n",ROOT.free_blocks);
 		fclose(simul);
@@ -269,6 +278,7 @@ void main(int argc, const char* argv[]){
 	{
 		readRoot();
 		printf("%d\n",ROOT.free_blocks);
+		printf("%d\n",ftell(simul));
 		if (strcmp(consoleCommand, init_) == 0)
 		{
 			init();
