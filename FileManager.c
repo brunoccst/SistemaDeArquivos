@@ -50,13 +50,14 @@ int filesize(FILE * fptr){
 	return size;
 }
 int hasEnoughSpace(int size){
-	unsigned short int nextFreePosition = ROOT.free_blocks;
+	unsigned short int * nextFreePosition = (unsigned short int *)malloc(sizeof(unsigned short int));
+	* nextFreePosition = ROOT.free_blocks;
 	printf("size: %d\n",size);
 	size += 1024;//PARA GRAVAR A LISTA DE INDEXES
-	while(nextFreePosition){
-		//printf("nextFreePosition: %u\n",nextFreePosition);
-		seekSector(nextFreePosition,0);
-		fread(&nextFreePosition,sizeof(unsigned short int),1,simul);
+	while(*nextFreePosition && size>0){
+		printf("nextFreePosition: %u\n",*nextFreePosition);
+		seekSector(*nextFreePosition,0);
+		fread(nextFreePosition,sizeof(unsigned short int),1,simul);
 		size -= 1024;
 	}
 	return size < 1;
@@ -170,10 +171,16 @@ void init()
 		printf("%d\n",&cont);
 		memset(sector_data,0,1024);
 		while(++cont){
-			printf("cont:%d",cont);
+			printf("cont:%d\n",cont);
+			printf("pocição que deveria ir:%d\n",ftell(simul)+1026);
 			seekSector(cont,0);
 			fwrite(&cont,sizeof(unsigned short int),1,simul);
-			fwrite(sector_data,sizeof(sector_data),1, simul);
+			seekSector(cont,0);
+			fread(&aux,sizeof(unsigned short int),1,simul);
+			seekSector(cont,2);
+			printf("valor lido:%d\n",aux);
+			fwrite(sector_data,1024,1, simul);
+			printf("pocição que esta:%d\n",ftell(simul));
 			//scanf("%d",&z);
 			//printf("%d\n%s\n",cont,sector_data);
 		}
@@ -282,6 +289,7 @@ void main(int argc, const char* argv[]){
 	else
 	{	
 		readRoot();
+		fseek(simul,0,SEEK_SET);
 		printf("%d\n",ROOT.free_blocks);
 		printf("%d\n",ftell(simul));
 		if (strcmp(consoleCommand, create_) == 0)
