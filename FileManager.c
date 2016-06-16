@@ -69,9 +69,8 @@ void writeNextBlock(){
 }
 void seekSector(int bloco,int offset){
 	int result = offset + 4096 + 1024*(bloco-1);
-	printf("position: %d\n",result);
 	fseek(simul,result,SEEK_SET);
-	printf("position: %d\n",ftell(simul));
+	//printf("position: %d\n",ftell(simul));
 	
 }
 void loadNextFreeBlock(){
@@ -154,10 +153,9 @@ void deleteSector(unsigned short int index){
 
 void init()
 {
-	fclose(simul);
 	if ( !( simul = fopen( "simul.fs", "wb+" )))
 	{
-	    printf( "File could not be opened.\n" );
+	    printf( "ON INIT simul.fs could not be opened.\n" );
 	}
 	else
 	{
@@ -167,12 +165,16 @@ void init()
 		printf("Initializing 'simul.fs'\n");
 		writeRoot();
 		unsigned short int cont = 0;
+		unsigned short int aux = 0;
+		int z = 0;
 		printf("%d\n",&cont);
 		memset(sector_data,0,1024);
 		while(++cont){
-			printf("%d\n",cont);
+			printf("cont:%d",cont);
+			seekSector(cont,0);
 			fwrite(&cont,sizeof(unsigned short int),1,simul);
 			fwrite(sector_data,sizeof(sector_data),1, simul);
+			//scanf("%d",&z);
 			//printf("%d\n%s\n",cont,sector_data);
 		}
 		ROOT.free_blocks = 0;
@@ -189,7 +191,7 @@ void create(){
 	
 	if ( !( toCreate = fopen( fileName, "rb" )))
 	{
-	    printf( "File could not be opened.\n" );
+	    printf( "ON CREATE file could not be opened.\n" );
 	}
 	else
 	{
@@ -219,7 +221,7 @@ void read(){
 
 	if ( !( toCreate = fopen( fileName, "wb+" )))
 	{
-	    printf( "File could not be opened.\n" );
+	    printf( "ON READ file could not be opened.\n" );
 	}
 	else{
 		loadIndexSector(entry.index);
@@ -269,45 +271,42 @@ void main(int argc, const char* argv[]){
 	memset(fileName,0,20);
 	memset(consoleCommand,0,10);
 	sprintf(consoleCommand,"%s",(char*) argv[1]);
-	
-	if ( !( simul = fopen( "simul.fs", "rb+" )))
+	if (strcmp(consoleCommand, init_) == 0)
+	{
+		init();
+	}
+	else if ( !( simul = fopen( "simul.fs", "rb+" )))
 	{
 	    printf( "File could not be opened.\n" );
 	}
 	else
-	{
+	{	
 		readRoot();
 		printf("%d\n",ROOT.free_blocks);
 		printf("%d\n",ftell(simul));
-		if (strcmp(consoleCommand, init_) == 0)
+		if (strcmp(consoleCommand, create_) == 0)
 		{
-			init();
+			sprintf(fileName,"%s",(char*) argv[2]);
+			create();
 		}
-		else{ 
-			if (strcmp(consoleCommand, create_) == 0)
-			{
-				sprintf(fileName,"%s",(char*) argv[2]);
-				create();
-			}
-			else if (strcmp(consoleCommand, read_) == 0)
-			{
-				sprintf(fileName,"%s",(char*) argv[2]);
-				read();
-			}
-			else if (strcmp(consoleCommand, del_) == 0)
-			{
-				sprintf(fileName,"%s",(char*) argv[2]);
-				delete();
-			}
-			else if (strcmp(consoleCommand, ls_) == 0)
-			{
-				list();
-			}
-			else
-			{
-				printf("Command not valid.\n");
-			}
+		else if (strcmp(consoleCommand, read_) == 0)
+		{
+			sprintf(fileName,"%s",(char*) argv[2]);
+			read();
+		}
+		else if (strcmp(consoleCommand, del_) == 0)
+		{
+			sprintf(fileName,"%s",(char*) argv[2]);
+			delete();
+		}
+		else if (strcmp(consoleCommand, ls_) == 0)
+		{
+			list();
+		}
+		else
+		{
+			printf("Command not valid.\n");
+		}
 			fclose(simul);
-		}
 	}
 }
