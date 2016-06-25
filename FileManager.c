@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#define MAX_SIZE 65536*1024
+#define MAX_SIZE 65535*1024
 
 struct rootdir_entry{
 	char name[20];
@@ -27,12 +27,21 @@ const char * ls_ = "-ls";
 
 unsigned char sector_data[1024];
 unsigned short int sector_index[512];
-unsigned int ignore = 0;
 char consoleCommand[16];
 char fileName[20];
 
 
 FILE * simul;
+struct rootdir_entry* findFile(){
+	int i = 0;	
+	for(;i<170;i++){
+		printf("teste while::%s\n",ROOT.list_entry[i].name);
+		if(strcmp(ROOT.list_entry[i].name, fileName) == 0 ){
+			return &ROOT.list_entry[i];
+		}
+	}
+	return NULL;
+}
 
 int isEOF(struct rootdir_entry * entry){
 	return ( * entry ).size == 0
@@ -50,13 +59,10 @@ int filesize(FILE * fptr){
 	return size;
 }
 int hasEnoughSpace(int size){
-	unsigned short int * nextFreePosition = (unsigned short int *)malloc(sizeof(unsigned short int));
-	* nextFreePosition = ROOT.free_blocks;
-	printf("size: %d\n",size);
+	unsigned short int nextFreePosition =  ROOT.free_blocks;
 	size += 1024;//PARA GRAVAR A LISTA DE INDEXES
-	while(*nextFreePosition && size>0){
-		printf("nextFreePosition: %u\n",*nextFreePosition);
-		seekSector(*nextFreePosition,0);
+	while(nextFreePosition && size>0){
+		seekSector(&nextFreePosition,0);
 		fread(nextFreePosition,sizeof(unsigned short int),1,simul);
 		size -= 1024;
 	}
@@ -70,6 +76,7 @@ void writeNextBlock(){
 }
 void seekSector(int bloco,int offset){
 	int result = offset + 4096 + 1024*(bloco-1);
+	//printf("resultado: %d\n",result);
 	fseek(simul,result,SEEK_SET);
 	//printf("position: %d\n",ftell(simul));
 	
@@ -84,12 +91,10 @@ void startRoot(){
 }
 void writeRoot(){
 	fseek(simul,0,SEEK_SET);
-	printf("lugar: %d\n",ftell(simul));
 	fwrite(&ROOT,sizeof(struct rootdir),1, simul);
 }
 void readRoot(){
 	fseek(simul,0,SEEK_SET);
-	printf("lugar: %d\n",ftell(simul));
 	fread(&ROOT,sizeof(struct rootdir),1, simul);
 }
 int createNewEntry(FILE * fptr){
@@ -97,19 +102,21 @@ int createNewEntry(FILE * fptr){
 	int size = filesize(fptr);
 	if(hasEnoughSpace(size)){
 		int cont = 0;
-		while(cont < 170 && isDeleted(newEntry) ){
+		while(cont < 170 && !isDeleted(newEntry) ){
 			cont++;
 			newEntry++;
 		}
 		printf("%d\n",cont);
 		if(cont == 170)
 			return 0;
+		printf("Criando entrada...");
 		memset(newEntry,0,sizeof(struct rootdir_entry));
 		( * newEntry ).size = size;
 		( * newEntry ).index = ROOT.free_blocks;
 		sprintf(( * newEntry ).name,"%s",fileName);
 		seekSector(ROOT.free_blocks,0);
 		loadNextFreeBlock();
+		printf("Entrada criada!!!");	
 		return 1;
 	}
 	return 0;
@@ -126,21 +133,11 @@ void copyFile(FILE * fptr){
 	}
 }
 void writeIndexes(){
-	struct rootdir_entry entry;
-	findFile(&entry);
+	struct rootdir_entry * entry = findFile();
 	seekSector(entry.index,sizeof(short int));
 	fwrite(sector_index,sizeof(sector_index),1,simul);
 	memset(sector_index,0,sizeof(sector_index));
 	fwrite(sector_index,sizeof(sector_index),1,simul);
-}
-void findFile(struct rootdir_entry * entry){
-	int i = 0;	
-	for(;i<170;i++){
-		if(strcmp(ROOT.list_entry[i].name, fileName) == 0 ){
-			entry = &ROOT.list_entry[i];
-			return;
-		}
-	}
 }
 void loadIndexSector(unsigned short int index){
 	seekSector(index,sizeof(short int));
@@ -154,41 +151,27 @@ void deleteSector(unsigned short int index){
 
 void init()
 {
-	if ( !( simul = fopen( "simul.fs", "wb+" )))
+	if ( !( simul = fopen( "simul.fs", "w" )))
 	{
 	    printf( "ON INIT simul.fs could not be opened.\n" );
 	}
 	else
 	{
-		//printf("'teste record ---> ROOT.free_blocks = %u'\n",ROOT.free_blocks);
-		//printf("'teste record ---> ROOT.free_blocks = %u'\n",ROOT.free_blocks);
 		startRoot();
 		printf("Initializing 'simul.fs'\n");
 		writeRoot();
-		unsigned short int cont = 0;
-		unsigned short int aux = 0;
-		int z = 0;
+		unsigned short int cont = 1;
+		int z= 0;
 		printf("%d\n",&cont);
 		memset(sector_data,0,1024);
-		while(++cont){
-			printf("cont:%d\n",cont);
-			printf("pocição que deveria ir:%d\n",ftell(simul)+1026);
-			seekSector(cont,0);
-			fwrite(&cont,sizeof(unsigned short int),1,simul);
-			seekSector(cont,0);
-			fread(&aux,sizeof(unsigned short int),1,simul);
-			seekSector(cont,2);
-			printf("valor lido:%d\n",aux);
-			fwrite(sector_data,1024,1, simul);
+		while(cont++){
+			sector_data[0] = cont & 0x00FF;
+			sector_data[1] = (cont & 0xFF00)>>8;
+			fwrite(sector_data,sizeof(sector_data),1,simul);
 			printf("pocição que esta:%d\n",ftell(simul));
-			//scanf("%d",&z);
-			//printf("%d\n%s\n",cont,sector_data);
-		}
-		ROOT.free_blocks = 0;
-		readRoot();
-		printf("'teste record ---> ROOT.free_blocks = %u'\n",ROOT.free_blocks);
-		printf("'simul.fs' initialized.\n");	
-		//printf("'teste record ---> ROOT.free_blocks = %u'\n",ROOT.free_blocks);
+			z += sizeof(sector_data);
+		}	
+		printf("%d\n",--cont);
 		fclose(simul);
 	}
 }
@@ -196,7 +179,7 @@ void create(){
 	FILE *toCreate;
 	memset(sector_data,0,1024);
 	
-	if ( !( toCreate = fopen( fileName, "rb" )))
+	if ( !( toCreate = fopen( fileName, "r" )))
 	{
 	    printf( "ON CREATE file could not be opened.\n" );
 	}
@@ -217,11 +200,8 @@ void create(){
 }
 void read(){
 	FILE *toCreate;
-	struct rootdir_entry entry;
-	memset(&entry,0,sizeof(struct rootdir_entry));
-	findFile(&entry);
-
-	if(isDeleted(&entry)){
+	struct rootdir_entry * entry = findFile();
+	if(entry == NULL || isDeleted(entry)){
 		printf("Arquivo nao encontrado!!!\n");
 		return;
 	}
@@ -231,9 +211,9 @@ void read(){
 	    printf( "ON READ file could not be opened.\n" );
 	}
 	else{
-		loadIndexSector(entry.index);
+		loadIndexSector((* entry ).index);
 		unsigned short int * indexes = sector_index;
-		int size = entry.size;
+		int size = (* entry ).size;
 		while((*indexes) != 0)
 		{
 			seekSector(*indexes,sizeof(short int));
@@ -246,14 +226,12 @@ void read(){
 	
 }
 void delete(){
-	struct rootdir_entry entry;
-	memset(&entry,0,sizeof(struct rootdir_entry));
-	findFile(&entry);
-	if(isDeleted(&entry)){
+	struct rootdir_entry * entry = findFile();
+	if(entry == NULL || isDeleted(entry)){
 		printf("Arquivo nao encontrado!!!\n");
 		return;
 	}
-	loadIndexSector(entry.index);
+	loadIndexSector((*entry).index);
 	unsigned short int * indexes = sector_index;
 	while((*indexes) != 0)
 	{
@@ -264,14 +242,16 @@ void delete(){
 void list(){
 	int cont = 0;
 	struct rootdir_entry * newEntry = ROOT.list_entry;
+	printf("-------------Arquivos-------------\n");
 	while(cont < 170){
 		cont++;
 		if(isDeleted(newEntry))
 			continue;
-		printf("%s", ( * newEntry ).name);
+		printf("%s\n", ( * newEntry ).name);
 		newEntry++;
 	}
 
+	printf("---------------FIM----------------\n");
 }
 
 void main(int argc, const char* argv[]){
@@ -282,7 +262,7 @@ void main(int argc, const char* argv[]){
 	{
 		init();
 	}
-	else if ( !( simul = fopen( "simul.fs", "rb+" )))
+	else if ( !( simul = fopen( "simul.fs", "r+" )))
 	{
 	    printf( "File could not be opened.\n" );
 	}
@@ -290,8 +270,6 @@ void main(int argc, const char* argv[]){
 	{	
 		readRoot();
 		fseek(simul,0,SEEK_SET);
-		printf("%d\n",ROOT.free_blocks);
-		printf("%d\n",ftell(simul));
 		if (strcmp(consoleCommand, create_) == 0)
 		{
 			sprintf(fileName,"%s",(char*) argv[2]);
