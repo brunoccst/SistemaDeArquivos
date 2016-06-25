@@ -78,7 +78,7 @@ void seekSector(int bloco,int offset){
 	int result = offset + 4096 + 1024*(bloco-1);
 	//printf("resultado: %d\n",result);
 	fseek(simul,result,SEEK_SET);
-	//printf("position: %d\n",ftell(simul));
+	printf("position: %d\n",ftell(simul));
 	
 }
 void loadNextFreeBlock(){
@@ -134,7 +134,7 @@ void copyFile(FILE * fptr){
 }
 void writeIndexes(){
 	struct rootdir_entry * entry = findFile();
-	seekSector(entry.index,sizeof(short int));
+	seekSector(entry->index,sizeof(short int));
 	fwrite(sector_index,sizeof(sector_index),1,simul);
 	memset(sector_index,0,sizeof(sector_index));
 	fwrite(sector_index,sizeof(sector_index),1,simul);
@@ -162,16 +162,17 @@ void init()
 		writeRoot();
 		unsigned short int cont = 1;
 		int z= 0;
-		printf("%d\n",&cont);
+		//printf("%d\n",&cont);
 		memset(sector_data,0,1024);
 		while(cont++){
 			sector_data[0] = cont & 0x00FF;
 			sector_data[1] = (cont & 0xFF00)>>8;
 			fwrite(sector_data,sizeof(sector_data),1,simul);
-			printf("pocição que esta:%d\n",ftell(simul));
+			//printf("pocição que esta:%d\n",ftell(simul));
 			z += sizeof(sector_data);
 		}	
-		printf("%d\n",--cont);
+		//printf("%d\n",--cont);
+		printf("Finished initializing 'simul.fs'\n");
 		fclose(simul);
 	}
 }
